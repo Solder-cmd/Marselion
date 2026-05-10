@@ -1,0 +1,386 @@
+import pygame as pg
+from Settings import *
+import random
+import os
+
+PLAYER = [
+    PGIMLOAD(path + 'player.png'),
+    PGIMLOAD(path + 'playerLeft.png'),
+    PGIMLOAD(path + 'playerRight.png'),
+    PGIMLOAD(path + 'playerDamaged.png')
+]
+
+MOBS = [
+    PGIMLOAD(path + 'enemyShip.png'),
+    PGIMLOAD(path + 'enemyUFO.png'),
+    PGIMLOAD(path + 'meteorBig.png'),
+    PGIMLOAD(path + 'meteorSmall.png')
+]
+
+ExplosionList = [
+    pg.image.load(f'Explosion{os.sep}explosion{int(x)}.png')
+    for x in range(1, 15)
+]
+
+SelfExplosionList = [
+    pg.image.load(f'Qexplosion{os.sep}{int(x)}.png')
+    for x in range(1, 21)
+]
+
+
+class Player(pg.sprite.Sprite):
+
+    def __init__(self, all_sprites, bullets, shoot_sound, explosion_sound):
+
+        pg.sprite.Sprite.__init__(self, all_sprites)
+
+        self.image = PLAYER[0]
+
+        self.all_sprites = all_sprites
+        self.bullets = bullets
+
+        self.rect = self.image.get_rect()
+
+        self.rect.center = (WIDTH / 2, HEIGHT - self.rect.height)
+
+        self.isLeft = False
+        self.isRight = False
+        self.isDamaged = False
+
+        self.health = 100
+
+        self.now = pg.time.get_ticks()
+
+        self.damageCount = 0
+
+        self.score = 0
+
+        self.lives = 0
+
+        self.shoot_Sound = shoot_sound
+        self.explosion_sound = explosion_sound
+
+        self.killed = False
+
+    def move(self, dx=0):
+
+        if self.rect.x + dx >= 0 and self.rect.x + dx + self.rect.width <= WIDTH:
+            self.rect.x += dx
+
+        if dx < 0:
+            self.isLeft = True
+            self.isRight = False
+
+        elif dx > 0:
+            self.isRight = True
+            self.isLeft = False
+
+        else:
+            self.isLeft = False
+            self.isRight = False
+
+    def shoot(self):
+
+        if pg.time.get_ticks() - self.now > 300 and not(self.killed):
+
+            self.shoot_Sound.play()
+
+            self.now = pg.time.get_ticks()
+
+            Bullet(
+                self.bullets,
+                self.all_sprites,
+                self.rect
+            )
+
+    def update(self):
+
+        if self.isLeft:
+            self.image = PLAYER[1]
+
+        elif self.isRight:
+            self.image = PLAYER[2]
+
+        else:
+            self.image = PLAYER[0]
+
+        if self.isDamaged:
+
+            self.damageCount += 1
+
+            self.image = PLAYER[3]
+
+            if self.damageCount == 15:
+                self.isDamaged = False
+                self.damageCount = 0
+
+        if self.health <= 0:
+
+            self.explosion_sound.play()
+
+            self.lives -= 1
+
+            self.health = 100
+
+            Explosion(
+                self.all_sprites,
+                self.rect,
+                True
+            )
+
+            self.killed = True
+
+            self.rect.y = HEIGHT + 200
+
+            self.now = pg.time.get_ticks()
+
+        if self.killed and pg.time.get_ticks() - self.now > 2000:
+
+            self.killed = False
+
+            self.rect.center = (
+                WIDTH / 2,
+                HEIGHT - self.rect.height
+            )
+
+
+class Bullet(pg.sprite.Sprite):
+
+    def __init__(self, bullets, all_sprites, rect, dir=1, color='Red'):
+
+        pg.sprite.Sprite.__init__(self, bullets, all_sprites)
+
+        self.image = PGIMLOAD(path + 'laser' + color + '.png')
+
+        self.rect = self.image.get_rect()
+
+        self.rect.center = rect.center
+
+        self.dir = dir
+
+        self.all_sprites = all_sprites
+
+        self.color = color
+
+    def update(self):
+
+        self.rect.y -= 8 * self.dir
+
+        if self.rect.y > HEIGHT or self.rect.y + self.rect.height < 0:
+            self.kill()
+
+    def kill(self):
+
+        super().kill()
+
+        if not(self.rect.y > HEIGHT or self.rect.y + self.rect.height < 0):
+
+            BulletHit(
+                self.all_sprites,
+                self.rect,
+                self.color
+            )
+
+
+class BulletHit(pg.sprite.Sprite):
+
+    def __init__(self, all_sprites, rect, color):
+
+        pg.sprite.Sprite.__init__(self, all_sprites)
+
+        self.image = PGIMLOAD(path + 'laser' + color + 'Shot.png')
+
+        self.rect = self.image.get_rect()
+
+        self.rect.center = (rect.x, rect.y)
+
+        self.now = pg.time.get_ticks()
+
+    def update(self):
+
+        if pg.time.get_ticks() - self.now > 300:
+            self.kill()
+
+
+class Mob(pg.sprite.Sprite):
+
+    def __init__(self, mobs, meteorites, all_sprites, sound):
+
+        pg.sprite.Sprite.__init__(
+            self,
+            mobs,
+            meteorites,
+            all_sprites
+        )
+
+        self.image = MOBS[random.randrange(2, 4)]
+
+        self.rect = self.image.get_rect()
+
+        self.rect.x = random.randrange(0, WIDTH)
+
+        self.speed_X = random.randrange(-2, 2)
+        self.speed_Y = random.randrange(1, 3)
+
+        self.name = 'meteor'
+
+        self.all_sprites = all_sprites
+
+        self.sound = sound
+
+        if self.rect.width > 44:
+
+            self.isBig = True
+
+            self.health = 100
+
+            self.stealth = 40
+
+        else:
+
+            self.isBig = False
+
+            self.health = 40
+
+            self.stealth = 10
+
+    def update(self):
+
+        self.rect.x += self.speed_X
+
+        self.rect.y += self.speed_Y
+
+        if (
+            (self.speed_X < 0 and self.rect.x <= 0)
+            or
+            (self.speed_X > 0 and self.rect.x + self.rect.width >= WIDTH)
+        ):
+
+            self.speed_X *= -1
+
+        if self.rect.y == HEIGHT:
+            self.rect.y = 0 - self.rect.height
+
+    def kill(self):
+
+        super().kill()
+
+        self.sound.play()
+
+        Explosion(
+            self.all_sprites,
+            self.rect
+        )
+
+
+class Enemy(pg.sprite.Sprite):
+
+    def __init__(self, mobs, bullets, all_sprites, sound):
+
+        pg.sprite.Sprite.__init__(
+            self,
+            mobs,
+            all_sprites
+        )
+
+        self.image = MOBS[random.randrange(0, 2)]
+
+        self.rect = self.image.get_rect()
+
+        self.bullets = bullets
+
+        self.all_sprites = all_sprites
+
+        self.stealth = 20
+
+        self.rect.x = random.randrange(0, WIDTH)
+
+        self.speed_X = random.randrange(-3, 3)
+
+        self.speed_Y = 2
+
+        self.health = 100
+
+        self.now = pg.time.get_ticks()
+
+        self.name = 'enemy'
+
+        self.sound = sound
+
+    def shoot(self):
+
+        if pg.time.get_ticks() - self.now > 500:
+
+            self.now = pg.time.get_ticks()
+
+            Bullet(
+                self.bullets,
+                self.all_sprites,
+                self.rect,
+                -1,
+                'Green'
+            )
+
+    def update(self):
+
+        self.rect.x += self.speed_X
+
+        self.rect.y += self.speed_Y
+
+        self.shoot()
+
+        if self.speed_X < 0 and self.rect.x <= 0:
+            self.speed_X *= -1
+
+        elif self.speed_X > 0 and self.rect.x + self.rect.width >= WIDTH:
+            self.speed_X *= -1
+
+        if self.rect.y == HEIGHT:
+            self.rect.y = 0 - self.rect.height
+
+    def kill(self):
+
+        super().kill()
+
+        self.sound.play()
+
+        Explosion(
+            self.all_sprites,
+            self.rect
+        )
+
+
+class Explosion(pg.sprite.Sprite):
+
+    def __init__(self, all_sprites, rect, player=False):
+
+        pg.sprite.Sprite.__init__(self, all_sprites)
+
+        if player:
+
+            self.EXX = SelfExplosionList
+
+            self.lim = 19
+
+        else:
+
+            self.EXX = ExplosionList
+
+            self.lim = 13
+
+        self.image = ExplosionList[0]
+
+        self.rect = self.image.get_rect()
+
+        self.rect.center = (rect.x, rect.y)
+
+        self.count = 0
+
+    def update(self):
+
+        self.count += 1
+
+        self.image = self.EXX[self.count]
+
+        if self.count >= self.lim:
+            self.kill()
